@@ -10,6 +10,9 @@ library(readxl)
 library(tidytext)
 library(tm)
 library(topicmodels)
+library(textdata)
+library(RColorBrewer)
+library(reshape2)
 ```
 
 # Loading the dataset
@@ -112,6 +115,7 @@ custom_stop_words <- tribble(
   "nga", "CUSTOM",
   "nag", "CUSTOM",
   "ikaw", "CUSTOM",
+  "bang", "CUSTOM",
   "ni", "CUSTOM"
 )
 
@@ -161,8 +165,7 @@ count(word)
 wordcloud(
   words = word_counts$word,
   freq = word_counts$n,
-max.words = 30
-)
+max.words = 30, colors = brewer.pal(8, "RdPu"))
 ```
 
 # Measuring word proximity
@@ -173,7 +176,7 @@ clean_corpus <- function(corpus) {
     corpus <- tm_map(corpus, removePunctuation)
     corpus <- tm_map(corpus, removeNumbers)
     corpus <- tm_map(corpus, content_transformer(tolower))
-    corpus <- tm_map(corpus, removeWords, c(stopwords("en"), "na", "sa", "ng", "po", "ang", "yung", "lang", "mga", "ko", "para", "kung", "ako", "pa", "kasi", "ka", "din", "mo", "niyo", "di", "kayo", "pero", "naman", "ba", "pag", "ano", "mag", "siya", "nyo", "mas", "rin", "namin", "yan", "sya", "https", "sila", "kapag", "kahit", "kaya", "pang", "nila", "yun", "ung", "tas", "si", "ay", "lng", "kay", "nya", "pag", "ito", "kami", "eh", "kau", "nang", "nman", "niya", "kau", "nga", "nag", "ikaw", "ni"))
+    corpus <- tm_map(corpus, removeWords, c(stopwords("en"), "na", "sa", "ng", "po", "ang", "yung", "lang", "mga", "ko", "para", "kung", "ako", "pa", "kasi", "ka", "din", "mo", "niyo", "di", "kayo", "pero", "naman", "ba", "pag", "ano", "mag", "siya", "nyo", "mas", "rin", "namin", "yan", "sya", "https", "sila", "kapag", "kahit", "kaya", "pang", "nila", "yun", "ung", "tas", "si", "ay", "lng", "kay", "nya", "pag", "ito", "kami", "eh", "kau", "nang", "nman", "niya", "kau", "nga", "nag", "ikaw", "ni", "bang"))
     corpus <- tm_map(corpus, stripWhitespace)
     return(corpus)
 }
@@ -196,4 +199,119 @@ dist() %>%
 hclust() %>%
 plot()
 ```
+
+# Sentiment Analysis
+
+## NRC Word-Emotion Association Lexicon
+The NRC Emotion Lexicon is a list of English words and their associations with eight basic emotions (anger, fear, anticipation, trust, surprise, sadness, joy, and disgust) and two sentiments (negative and positive). The annotations were manually done by crowdsourcing.
+
+```{r}
+get_sentiments("nrc") %>% 
+  count(sentiment) %>% 
+  arrange(desc(n))
+```
+
+## Counting dataset sentiments
+```{r}
+nrc_sentiment_tidy_dataset <- tidy_dataset %>%
+inner_join(get_sentiments("nrc"))
+
+nrc_sentiment_tidy_dataset %>%
+  count(sentiment) %>%
+  arrange(desc(n))
+```
+
+## Top words per sentiment
+```{r}
+count_nrc_sentiment_tidy_dataset <- nrc_sentiment_tidy_dataset  %>%
+filter(sentiment %in% c("positive", "trust", "joy", "anticipation", "negative", "fear", "anger", "sadness", "surprise", "disgust")) %>%
+  count(word, sentiment) %>% 
+  group_by(sentiment) %>% 
+  top_n(10, n) %>% 
+  ungroup() %>% 
+  mutate(word2 = fct_reorder(word, n))
+
+count_sentiment_tidy_dataset
+```
+
+## Visualizing Sentiment
+```{r, fig.height=10}
+ggplot(count_nrc_sentiment_tidy_dataset, aes(x = word2, y = n, fill = sentiment)) +
+  geom_col(show.legend = FALSE) +
+  # Create a separate facet for each sentiment with free axes
+  facet_wrap(~ sentiment, scales = "free") +
+  coord_flip() +
+  # Title the plot "Sentiment Word Counts" with "Words" for the x-axis
+  labs(
+    title = "Sentiment Word Counts",
+    x = "Words"
+  )
+```
+
+## Sentiment Distribution
+
+```{r, fig.width=10}
+nrc_sentiment_tidy_dataset %>%
+  count(id, sentiment) %>%
+  pivot_wider(names_from = sentiment, values_from = n, values_fill = 0) %>%
+  mutate(sentiment = positive - negative) %>%
+  ggplot(aes(x = id, y = sentiment)) + geom_col(show.legend = FALSE)
+```
+
+## Determining the most positive and negative comments
+```{r}
+nrc_sentiment_tidy_dataset %>%
+  count(id, sentiment) %>%
+  pivot_wider(names_from = sentiment, values_from = n, values_fill = 0) %>%
+  mutate(sentiment = positive - negative) %>%
+  arrange(sentiment)
+```
+
+### Most positive comments
+
+1 "God First 🙏☝️ Yes na yes ako para maging Presidente ng ating Pilipinas  🇵🇭  ❤️ Isko Moreno Domagoso he has the ability to Rule our country, a great honest man, strong political will, transparency in all aspects in terms of serving his constituents bcoz"&" of his love and most of all GOD's FEARING PERSON . God bless our dear country Pilipinas  🇵🇭 ❤️ and God bless and protect us all always. amen 🙏 🙏 🙏"
+
+2 "🌌May GOD Bless Us All With Lots of Wisdom To Share With None... May The Lord Jesus Christ Protect and Guide Us All To GOD's Gace and Embrace. Amen. 🙏🏼🕊🌕☀️🌴🌻💜🌐🇵🇭  #LeniKiko2022 #VoteKikoToProtectLeni  #LeniKikoAllTheWay  #10LeniRobredoPresident "&" #7KikoPangilinanVicePresident  #GobyernongTapatAngatBuhayLahat  #PinkIsHope  #HelloPagkainGoodbyeGutom  🙏🏼🕊🌕☀️🌴💟💚💜🌷🌾🌻🌐🇵🇭"
+
+3 "Congratulations sa mga organizers! Excellent para sa akin mga gawa nyo! GOD LOVES A CHEERFUL GIVER! time, talent and treasure na i share because of radical ang magmahal. God bless your heart!"
+
+4 "Kaya we have to be UNITED...don't cause division....the Philippines was never united..crab mentality is our downfall..the leader should influence its members  to work together, and together work towards the fulfillment of its goals for the benefit of the "&"country and its people, as a president how would you lead a divided community, a divided country?The leader is the influence, the driving force the motivates its people...but motivates to what? To hate each other? To persecute? To dishonor and to defame? "&"To malign?  Schools, teaches eadership skills...how to be effective leaders..blah blah blah..but, I guess it will just stay in the 4 corners and walls of the classrooms...If the leader cause divisions and factions, the country will fall apart and instead "&"of working for the same goals,the people will work only for their own  self-interests. What is it that we look for a leader? What are the qualities of an effective president? Who is the best person to lead the Philippines? Who?"
+
+5 "Accurate, that's the best thing to do. It is strategic in a way that Filipinos tend to believe in religious leaders because they use the 'teachings of God' in ordering their church members in terms of moral aspect. When Church is involved, it can influenc"&"e the minds of their believers regards with this topic. This is also a long-term solution because 'mind-conditioning' especially when Bible teachings are concerned, will seed the moral mindset of everyone."
+
+### Most negative comments
+
+1 "yung isa din mahilig sa absent, absentee as governor, absentee as senator, absentee sa debate, absent minded nga din pag tinanong."
+
+2 "John Paul Padonia nonsense! Get lost!"
+
+3 "So when they continued asking him, he lifted up himself, and said unto them, He that is without sin among you, let him first cast a stone at her.   John 8:7"
+
+4 "Dennis Cayabyab Funny to hear a Bible verse cited here, because it completely lacks context.  There's a difference between casting a stone and stating facts. The quote comes from Jesus addressing the Pharisees who were more an ancient form of chismosos at"&"tacking an adulteress.  This is not a personal matter such as that, this is the fate of a nation at stake. Manny has made countless mistakes, but they are not a legitimate reason to disregard what he is saying.  Please don't meaninglessly quote the Bible "&"to make yourself look better than others. That is exactly what the Pharisees were doing. Instead, examine the situation at face value and you will see this Biblical verse does not apply.  We are all flawed, so whether religious or not, personally attackin"&"g a single person is a lost cause in terms of making meaningful change. But this is public policy: if you misinterpret that verse, it essentially means no one is allowed to think critically."
+
+5 Wag ipakita yung drone shot 😭😭😭
+
+## Bing sentiment lexicon
+General purpose English sentiment lexicon that categorizes words in a binary fashion, either positive or negative
+```{r}
+get_sentiments("bing") %>% 
+  count(sentiment) %>% 
+  arrange(desc(n))
+```
+
+## Counting dataset sentiments
+```{r}
+bing_sentiment_tidy_dataset <- tidy_dataset %>%
+inner_join(get_sentiments("bing"))
+
+bing_sentiment_tidy_dataset %>%
+  count(sentiment) %>%
+  arrange(desc(n))
+```
+
+
+
+
+
+
 
