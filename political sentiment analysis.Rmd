@@ -29,7 +29,7 @@ dataset <- dataset %>%
   mutate(id = row_number())
 ```
 
-# Wrangling Text: Facebook post and comments
+# Wrangling Text: Facebook comments and replies
 
 ## Counting words
 ```{r}
